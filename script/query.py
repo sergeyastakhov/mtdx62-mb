@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+
+"""Query a MTDx62-MB over Modbus and print every value.
+
+Connects over Modbus TCP (a network gateway) or a serial/USB port, reads the
+whole device once, and dumps every subsystem's values to the terminal. Handy
+for checking a real device without Home Assistant.
+
+The library only needs the connection protocol; this script selects the
+pymodbus backend, so install the ``cli`` extra first.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+import time
+import logging
+
+from modbus_connection import ModbusConnection, ModbusError
+from modbus_connection.cli_helper import CountingUnit, print_component
+
+from pymodbus import pymodbus_apply_logging_config
+
+from mtdx62_mb import MTDx62_MB
+
+pymodbus_apply_logging_config("DEBUG")
+
+# (label, attribute name on MTDx62_MB) — the order in which sections are printed.
+SECTIONS: list[tuple[str, str]] = [
+    ("Device state", "state"),
+    ("Device config", "config"),
+]
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    description = __doc__.splitlines()[0] if __doc__ else ""
+    parser = argparse.ArgumentParser(description=description)
+    sub = parser.add_subparsers(dest="transport", required=True)
+
+    # Shared options available on each transport (so --unit can follow the host).
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--unit",
+        type=int,
+        default=246,
+        help="Modbus unit/station address (default: 246)",
+    )
+
+    tcp = sub.add_parser(
+        "tcp",
+        parents=[common],
+        help="connect over Modbus TCP (network gateway)",
+    )
+    tcp.add_argument("host", help="hostname or IP of the gateway/device")
+    tcp.add_argument("--port", type=int, default=502, help="TCP port (default: 502)")
+    tcp.add_argument(
+        "--framer",
+        choices=("rtu", "socket"),
+        default="rtu",
+        help=(
+            "wire framing: 'rtu' for RTU-over-TCP (transparent serial gateways, "
+            "the TROVIS default) or 'socket' for native Modbus TCP (default: rtu)"
+        ),
+    )
+
+    serial = sub.add_parser(
+        "serial",
+        parents=[common],
+        help="connect over a serial/USB port",
+    )
+    serial.add_argument("device", help="serial device, e.g. /dev/ttyUSB0")
+    serial.add_argument("--baudrate", type=int, default=9600, help="default: 9600")
+    serial.add_argument("--parity", choices=("N", "E", "O"), default="N")
+    serial.add_argument("--stopbits", type=int, choices=(1, 2), default=1)
+    serial.add_argument("--bytesize", type=int, choices=(7, 8), default=8)
+    return parser.parse_args(argv)
+
+
+async def _open(args: argparse.Namespace) -> ModbusConnection:
+    # Imported here so the module loads (and --help works) without a backend.
+    # pylint: disable=import-outside-toplevel
+    from modbus_connection.pymodbus import connect_serial, connect_tcp
+
+    if args.transport == "serial":
+        return await connect_serial(
+            args.device,
+            baudrate=args.baudrate,
+            parity=args.parity,
+            stopbits=args.stopbits,
+            bytesize=args.bytesize,
+        )
+    return await connect_tcp(args.host, port=args.port, framer=args.framer)
+
+
+def _print(device: MTDx62_MB) -> None:
+    for label, attr in SECTIONS:
+        print()
+        print_component(getattr(device, attr), title=label)
+
+
+async def _run(args: argparse.Namespace) -> int:
+    try:
+        connection = await _open(args)
+    except ModbusError as err:
+        print(f"Could not connect: {err}", file=sys.stderr)
+        return 1
+
+    counting = CountingUnit(connection.for_unit(args.unit))
+    try:
+        device = MTDx62_MB(counting)
+        start = time.monotonic()
+        await device.async_update()
+        elapsed = time.monotonic() - start
+    except ModbusError as err:
+        print(f"Error reading device: {err}", file=sys.stderr)
+        return 1
+    finally:
+        await connection.close()
+
+    _print(device)
+    print(f"\nQueried in {elapsed * 1000:.0f} ms ({counting.reads} Modbus reads)")
+    return 0
+
+
+def main() -> int:
+    return asyncio.run(_run(_parse_args()))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

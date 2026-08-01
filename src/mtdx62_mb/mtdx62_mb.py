@@ -10,7 +10,6 @@ from modbus_connection.model import (
     gauge,
     integer,
     uint32,
-    discrete_input,
     enum,
 )
 
@@ -24,7 +23,7 @@ class DeviceStatus(IntEnum):
     SELF_TEST_SUCCESS = 1
     """ Device program self-test successful """
 
-    SELF_TEST_FILED = 2
+    SELF_TEST_FAILED = 2
     """ Device program self-test failed """
 
     OTHER_FAULTS = 3
@@ -75,21 +74,32 @@ class DeviceState(Component):
 
     register_space = "input"
 
-    person_status = discrete_input(0)
+    _person_status = integer(0, signed=False)
     illumination = gauge(1, 0.1, signed=False, unit="Lux")
     target_distance = gauge(2, 0.01, signed=False, unit="m")
     device_status = enum(3, DeviceStatus)
 
-    app_version_raw = uint32(4)
-    radar_version_raw = uint32(6)
+    _app_version_raw = uint32(4)
+    _radar_version_raw = uint32(6)
+
+    @property
+    def person_status(self) -> bool | None:
+        """Return True if a person is detected, False if not, or None if unknown."""
+
+        if self.device_status != DeviceStatus.SELF_TEST_SUCCESS:
+            return None
+
+        return self._person_status == 1
 
     @property
     def app_version(self) -> str | None:
-        return format_version(self.app_version_raw)
+        """Return the formatted application version string, e.g. '1.2.3'."""
+        return format_version(self._app_version_raw)
 
     @property
     def radar_version(self) -> str | None:
-        return format_version(self.radar_version_raw)
+        """Return the formatted radar version string, e.g. '1.2.3'."""
+        return format_version(self._radar_version_raw)
 
 
 class DeviceConfig(Component):
@@ -133,7 +143,8 @@ class DeviceConfig(Component):
     light_threshold = gauge(11, 0.1, signed=False, unit="Lux")
     """ Light threshold (0-4200 Lux, default 0 - disable lighting threshold function)
 
-    If current lighting value is less than the lighting threshold and someone is detected, output the presence status; otherwise, output no one. """
+    If current lighting value is less than the lighting threshold and someone is detected,
+    output the presence status; otherwise, output no one. """
 
     data_report_interval = gauge(12, 1, signed=False, unit="s")
     """ Data report interval (1-36000 s, default 1) """
@@ -142,11 +153,19 @@ class DeviceConfig(Component):
     """ Device MAC address (0-23, default factory random) """
 
 
-class MTDx62_MB(ComponentGroup):
+class MTDx62_MB:  # pylint: disable=invalid-name
     """MTDx62-MB human presence sensor."""
 
-    def __init__(self, modbus_unit: ModbusUnit):
-        self._modbus_unit = modbus_unit
+    def __init__(self, unit: ModbusUnit):
+        self._unit = unit
 
-        self.device_state = DeviceState(modbus_unit)
-        self.device_config = DeviceConfig(modbus_unit)
+        self.state = DeviceState(unit)
+        self.config = DeviceConfig(unit)
+
+        self._components = (self.state, self.config)
+
+        self._group = ComponentGroup(unit, self._components)
+
+    async def async_update(self) -> None:
+        """Refresh all active subsystems in pooled Modbus reads."""
+        await self._group.async_update()

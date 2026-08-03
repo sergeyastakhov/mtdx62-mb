@@ -79,9 +79,6 @@ class DeviceState(Component):
     target_distance = gauge(2, 0.01, signed=False, unit="m")
     device_status = enum(3, DeviceStatus)
 
-    _app_version_raw = uint32(4)
-    _radar_version_raw = uint32(6)
-
     @property
     def person_status(self) -> bool | None:
         """Return True if a person is detected, False if not, or None if unknown."""
@@ -89,7 +86,16 @@ class DeviceState(Component):
         if self.device_status != DeviceStatus.SELF_TEST_SUCCESS:
             return None
 
-        return self._person_status == 1
+        return self._person_status != 0
+
+
+class DeviceVersionInfo(Component):
+    """Device version info component"""
+
+    register_space = "input"
+
+    _app_version_raw = uint32(4)
+    _radar_version_raw = uint32(6)
 
     @property
     def app_version(self) -> str | None:
@@ -102,8 +108,8 @@ class DeviceState(Component):
         return format_version(self._radar_version_raw)
 
 
-class DeviceConfig(Component):
-    """Device configuration component"""
+class DetectionConfig(Component):
+    """Detection configuration component"""
 
     register_space = "holding"
 
@@ -128,6 +134,18 @@ class DeviceConfig(Component):
     entry_indentation_distance = gauge(6, 0.01, signed=False, unit="m")
     """ Entrance distance indented (0-10 m, default 0.6 m) """
 
+    light_threshold = gauge(11, 0.1, signed=False, unit="Lux")
+    """ Light threshold (0-4200 Lux, default 0 - disable lighting threshold function)
+
+    If current lighting value is less than the lighting threshold and someone is detected,
+    output the presence status; otherwise, output no one. """
+
+
+class ModbusConfig(Component):
+    """Modbus configuration component"""
+
+    register_space = "holding"
+
     device_id = integer(7, signed=False)
     """ Device ID (1-247, default 1) """
 
@@ -137,20 +155,20 @@ class DeviceConfig(Component):
     parity_type = enum(9, ParityType)
     """ Parity type (0: No parity, 1: Odd parity, 2: Even parity, default 0) """
 
+    device_mac = integer(13, signed=False)
+    """ Device MAC address (0-23, default factory random) """
+
+
+class DataReportConfig(Component):
+    """Data report configuration component"""
+
+    register_space = "holding"
+
     data_report_mode = enum(10, DataReportMode)
     """ Data report mode (1: Report data on, 2: Report data off, default 2) """
 
-    light_threshold = gauge(11, 0.1, signed=False, unit="Lux")
-    """ Light threshold (0-4200 Lux, default 0 - disable lighting threshold function)
-
-    If current lighting value is less than the lighting threshold and someone is detected,
-    output the presence status; otherwise, output no one. """
-
     data_report_interval = gauge(12, 1, signed=False, unit="s")
     """ Data report interval (1-36000 s, default 1) """
-
-    device_mac = integer(13, signed=False)
-    """ Device MAC address (0-23, default factory random) """
 
 
 class MTDx62_MB:  # pylint: disable=invalid-name
@@ -160,12 +178,32 @@ class MTDx62_MB:  # pylint: disable=invalid-name
         self._unit = unit
 
         self.state = DeviceState(unit)
-        self.config = DeviceConfig(unit)
+        self.version = DeviceVersionInfo(unit)
 
-        self._components = (self.state, self.config)
+        self.detection_config = DetectionConfig(unit)
+        self.modbus_config = ModbusConfig(unit)
+        self.data_report_config = DataReportConfig(unit)
 
-        self._group = ComponentGroup(unit, self._components)
+        self._components = (
+            self.state,
+            self.version,
+            self.detection_config,
+            self.modbus_config,
+            self.data_report_config,
+        )
+
+        self._all_group = ComponentGroup(unit, self._components)
+
+        self._state_group = ComponentGroup(unit, (self.state, self.version))
+
+        self._config_group = ComponentGroup(
+            unit, (self.detection_config, self.modbus_config, self.data_report_config)
+        )
 
     async def async_update(self) -> None:
         """Refresh all active subsystems in pooled Modbus reads."""
-        await self._group.async_update()
+        await self._all_group.async_update()
+
+    async def async_update_config(self) -> None:
+        """Refresh config info in pooled Modbus reads."""
+        await self._config_group.async_update()

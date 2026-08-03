@@ -30,7 +30,10 @@ pymodbus_apply_logging_config("DEBUG")
 # (label, attribute name on MTDx62_MB) — the order in which sections are printed.
 SECTIONS: list[tuple[str, str]] = [
     ("Device state", "state"),
-    ("Device config", "config"),
+    ("Version info", "version"),
+    ("Detection config", "detection_config"),
+    ("Modbus config", "modbus_config"),
+    ("Data report config", "data_report_config"),
 ]
 
 

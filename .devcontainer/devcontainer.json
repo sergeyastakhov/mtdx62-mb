@@ -6,6 +6,11 @@
 		"dockerfile": "Dockerfile",
 		"context": ".."
 	},
+	"runArgs": [
+		"--device=/dev/ttyUSB0",
+		"--privileged"
+	],
+	"remoteUser": "vscode",
 	"customizations": {
 		"vscode": {
 			"extensions": [
@@ -20,8 +25,7 @@
 				"ms-python.black-formatter",
 				"ms-vsliveshare.vsliveshare",
 				"ryanluker.vscode-coverage-gutters",
-				"bungcip.better-toml",
-				"GitHub.copilot"
+				"tamasfe.even-better-toml"
 			],
 			"settings": {
 				"python.defaultInterpreterPath": "/usr/local/bin/python",

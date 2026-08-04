@@ -16,7 +16,6 @@ import argparse
 import asyncio
 import sys
 import time
-import logging
 
 from modbus_connection import ModbusConnection, ModbusError
 from modbus_connection.cli_helper import CountingUnit, print_component

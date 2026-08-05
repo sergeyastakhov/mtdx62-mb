@@ -3,10 +3,8 @@ requires = ["flit_core >=2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name =  "mtdx62-mb"
-authors = [
-    {name = "Sergey Astakhov", email = "sergeyastakhov@mail.ru"},
-]
+name = "mtdx62-mb"
+authors = [{ name = "Sergey Astakhov", email = "sergeyastakhov@mail.ru" }]
 description = "Python library for connecting MTDx62-MB human presence sensor over Modbus."
 readme = "README.md"
 classifiers = [
@@ -14,7 +12,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Topic :: Home Automation"
+    "Topic :: Home Automation",
 ]
 requires-python = ">=3.12"
 dynamic = ["version"]
@@ -24,9 +22,7 @@ dynamic = ["version"]
 dependencies = ["modbus-connection>=3.6"]
 
 [project.optional-dependencies]
-spark = [
-    "pyspark>=3.0.0"
-]
+spark = ["pyspark>=3.0.0"]
 # Concrete backend for the script/query.py CLI (pip install mtdx62-mb[cli]).
 cli = ["modbus-connection[pymodbus]>=3.6"]
 
@@ -46,4 +42,5 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
 testpaths = ["tests"]

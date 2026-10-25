@@ -19,12 +19,12 @@ dynamic = ["version"]
 
 # Protocol + the device-modelling framework (modbus_connection.model). The caller
 # injects a ModbusUnit built from whichever backend they choose.
-dependencies = ["modbus-connection>=3.6"]
+dependencies = ["modbus-connection>=4.12"]
 
 [project.optional-dependencies]
 spark = ["pyspark>=3.0.0"]
 # Concrete backend for the script/query.py CLI (pip install mtdx62-mb[cli]).
-cli = ["modbus-connection[pymodbus]>=3.6"]
+cli = ["modbus-connection[pymodbus]>=4.12"]
 
 [project.urls]
 Documentation = "https://github.com/sergeyastakhov/mtdx62-mb/tree/main#readme"
